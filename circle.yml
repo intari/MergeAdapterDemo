@@ -1,0 +1,41 @@
+#based off https://github.com/circleci/EspressoSample
+machine:
+  environment:
+    PATH: "~/$CIRCLE_PROJECT_REPONAME/gradle-2.9/bin:$PATH"
+    TERM: "dumb"
+    ADB_INSTALL_TIMEOUT: "10"
+    GRADLE_OPTS: '-Dorg.gradle.jvmargs="-Xmx2048m -XX:+HeapDumpOnOutOfMemoryError"'
+
+dependencies:
+  pre:
+    - wget "https://services.gradle.org/distributions/gradle-2.9-bin.zip"; unzip gradle-2.9-bin.zip
+    - echo y | android update sdk --no-ui --all --filter tool,extra-android-m2repository,extra-android-support,extra-google-google_play_services,extra-google-m2repository,android-23
+    - echo y | android update sdk --no-ui --all --filter build-tools-23.0.2
+
+test:
+  override:
+    # create emulator
+    #-t "Google Inc.:Google APIs:23" --abi google_apis/armeabi-v7a
+    #- echo n | android create avd --force -n myemulator -t "android-16" --abi armeabi-v7a -s "1080x1920"
+    #this COULD work: https://circleci.com/gh/intari/ListViewDemo/19
+    #- android create avd --force -n myemulator-google -t "Google Inc.:Google APIs:21" --abi google_apis/armeabi-v7a 
+    # start the emulator
+    - emulator -avd circleci-android22  -no-audio -no-window:
+        background: true
+        parallel: true
+    # wait for it to have booted
+    - circle-android wait-for-boot
+    # unlock the emulator screen
+    - sleep 30
+    - adb shell input keyevent 82
+    # build and test
+    - ./gradlew clean build jacocoTestReport assembleAndroidTest
+    # run tests  against the emulator.
+    - ./gradlew connectedAndroidTest
+    # copy the build outputs to artifacts
+    - cp -r app/build/outputs $CIRCLE_ARTIFACTS
+    # copy the test results to the test results directory.
+    - cp -r app/build/outputs/androidTest-results/* $CIRCLE_TEST_REPORTS
+    - cp -r app/build/test-results/* $CIRCLE_TEST_REPORTS
+    # Codecov.io upload 
+    - bash <(curl -s https://codecov.io/bash)
